@@ -10,17 +10,21 @@ class UserManager(BaseUserManager):
     def create_user(self, phone, password=None, **extra_fields):
         if not phone:
             raise ValueError("Mobile number dewa lagbe")
+
         if "email" in extra_fields and extra_fields["email"]:
             extra_fields["email"] = extra_fields["email"].lower()
+
         user = self.model(phone=phone, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
+
         return user
 
     def create_superuser(self, phone, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_verified", True)
+
         return self.create_user(phone, password, **extra_fields)
 
 
@@ -29,12 +33,13 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     full_name = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=11, unique=True)  # 01XXXXXXXXX
+    phone = models.CharField(max_length=11, unique=True)
+
     facebook_page_name = models.CharField(max_length=150, blank=True)
     address = models.TextField(blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
 
-    is_verified = models.BooleanField(default=False)  # OTP verify hole True
+    is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
@@ -51,16 +56,37 @@ class User(AbstractBaseUser, PermissionsMixin):
 class OTP(models.Model):
     REGISTER = "register"
     RESET = "reset"
-    PURPOSES = [(REGISTER, "Registration"), (RESET, "Password reset")]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps")
-    purpose = models.CharField(max_length=20, choices=PURPOSES)
-    code_hash = models.CharField(max_length=128)  # OTP hash kore rakha hoy
+    PURPOSES = [
+        (REGISTER, "Registration"),
+        (RESET, "Password reset"),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="otps",
+    )
+
+    purpose = models.CharField(
+        max_length=20,
+        choices=PURPOSES,
+    )
+
+    code_hash = models.CharField(max_length=128)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     attempts = models.PositiveSmallIntegerField(default=0)
     is_used = models.BooleanField(default=False)
-    debug_code = models.CharField(max_length=6, blank=True)  # shudhu DEBUG=True te save hoy
+
+    debug_code = models.CharField(
+        max_length=6,
+        blank=True,
+    )
 
     class Meta:
-        indexes = [models.Index(fields=["user", "purpose", "-created_at"])]
+        indexes = [
+            models.Index(
+                fields=["user", "purpose", "-created_at"]
+            )
+        ]
