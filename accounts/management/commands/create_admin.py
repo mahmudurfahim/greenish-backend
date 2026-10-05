@@ -1,3 +1,4 @@
+
 import os
 
 from django.core.management.base import BaseCommand
@@ -11,6 +12,7 @@ class Command(BaseCommand):
         phone = os.getenv("DJANGO_SUPERUSER_PHONE")
         password = os.getenv("DJANGO_SUPERUSER_PASSWORD")
         name = os.getenv("DJANGO_SUPERUSER_NAME", "Admin")
+        email = os.getenv("DJANGO_SUPERUSER_EMAIL", "admin@example.com")
 
         if not phone or not password:
             self.stdout.write(
@@ -22,17 +24,19 @@ class Command(BaseCommand):
 
         user, created = User.objects.get_or_create(
             phone=phone,
-            defaults={"name": name},
+            defaults={
+                "full_name": name,
+                "email": email,
+            },
         )
 
-        if created:
-            user.set_password(password)
-        else:
-            user.set_password(password)
-
+        user.set_password(password)
+        user.full_name = name
+        user.email = email
         user.is_active = True
         user.is_staff = True
         user.is_superuser = True
+        user.is_verified = True
         user.save()
 
         self.stdout.write(
