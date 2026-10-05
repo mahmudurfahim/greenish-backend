@@ -6,7 +6,6 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
 
@@ -32,6 +31,12 @@ class TooManyRequests(APIException):
     status_code = 429
     default_detail = "অনেক বেশি চেষ্টা করা হয়েছে। একটু পরে আবার চেষ্টা করুন।"
     default_code = "throttled"
+
+
+class SmsFailed(APIException):
+    status_code = 503
+    default_detail = "SMS পাঠানো যায়নি। একটু পরে আবার চেষ্টা করুন।"
+    default_code = "sms_failed"
 
 
 def generate_code() -> str:
@@ -67,7 +72,7 @@ def send_sms(phone: str, message: str) -> None:
 
 
 def issue_otp(user, purpose: str) -> None:
-    """Notun OTP baniye email + SMS dui jaygay pathay."""
+    """Notun OTP baniye SMS e pathay. SMS fail hole error dey."""
     now = timezone.now()
 
     last = OTP.objects.filter(user=user, purpose=purpose).order_by("-created_at").first()
@@ -80,7 +85,7 @@ def issue_otp(user, purpose: str) -> None:
     OTP.objects.filter(user=user, purpose=purpose, is_used=False).update(is_used=True)
 
     code = generate_code()
-    OTP.objects.create(
+    otp = OTP.objects.create(
         user=user,
         purpose=purpose,
         code_hash=make_password(code),
@@ -92,18 +97,12 @@ def issue_otp(user, purpose: str) -> None:
         f"Greenish Trade: Your OTP is {code}. "
         f"Valid for {settings.OTP_EXPIRY_MINUTES} minutes. Do not share it."
     )
-    email_text = (
-        f"Greenish Trade: আপনার OTP কোড {code}। "
-        f"{settings.OTP_EXPIRY_MINUTES} মিনিট পর্যন্ত বৈধ। কাউকে শেয়ার করবেন না।"
-    )
     try:
         send_sms(user.phone, sms_text)
-    except Exception as exc:  # SMS fail korleo email diye cholbe
-        print("SMS error:", exc)
-    try:
-        send_mail("Greenish Trade OTP", email_text, settings.DEFAULT_FROM_EMAIL, [user.email])
     except Exception as exc:
-        print("Email error:", exc)
+        print("SMS error:", exc)  # Render Logs e dekha jabe
+        otp.delete()  # jate sathe sathe abar chesta kora jay (cooldown na lage)
+        raise SmsFailed()
 
 
 def check_otp(user, code: str, purpose: str) -> None:

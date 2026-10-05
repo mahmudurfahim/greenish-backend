@@ -16,7 +16,7 @@ from .serializers import (
     UserSerializer,
     VerifyOTPSerializer,
 )
-from .utils import check_otp, issue_otp
+from .utils import SmsFailed, check_otp, issue_otp
 
 
 def tokens_for(user):
@@ -36,10 +36,14 @@ class RegisterView(PublicAuthView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        issue_otp(user, OTP.REGISTER)
+        try:
+            issue_otp(user, OTP.REGISTER)
+        except SmsFailed:
+            user.delete()  # SMS na gele user rakhbo na, jate abar register kora jay
+            raise
         return Response(
             {
-                "message": "নিবন্ধন সফল। আপনার ইমেইল ও ফোনে ৬ সংখ্যার OTP পাঠানো হয়েছে।",
+                "message": "নিবন্ধন সফল। আপনার ফোনে ৬ সংখ্যার OTP পাঠানো হয়েছে।",
                 "phone": user.phone,
             },
             status=status.HTTP_201_CREATED,
@@ -109,7 +113,7 @@ class ResetPasswordView(PublicAuthView):
             return Response({"code": ["OTP ভুল হয়েছে।"]}, status=400)
         check_otp(user, s.validated_data["code"], OTP.RESET)
         user.set_password(s.validated_data["new_password"])
-        user.is_verified = True  # OTP diye phone/email prove hoye gese
+        user.is_verified = True  # OTP diye phone prove hoye gese
         user.save()
         return Response({"message": "পাসওয়ার্ড পরিবর্তন সফল। এখন লগইন করুন।"})
 
